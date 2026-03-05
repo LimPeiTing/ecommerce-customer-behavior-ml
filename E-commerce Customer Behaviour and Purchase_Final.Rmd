@@ -1,0 +1,1871 @@
+---
+title: "E-Commerce User Behavior Modeling through Classification, Regression and Predictive Analytics"
+author: "Group 11_Project-WQD7004_PROGRAMMING FOR DATA SCIENCE"
+date: "2025-06-12"
+output: html_document
+---
+
+## R Markdown
+
+Project Title "E-Commerce User Behavior Modeling through Classification, Regression and Predictive Analytics"
+
+### Introduction
+
+The “E-commerce Customer Behaviour and Purchase” dataset serves as a rich and structured representation of online-shopping-customer interactions within an E-commerce platform. The dataset from Kaggle is described as a synthetically generated dataset using the Python Faker library. Although it is not real-world data, the dataset is modelled to reflect or imitate realistic e-commerce behaviour patterns.
+
+The dataset is generated to facilitate various types of data science and machine learning tasks related to online retail, such as customer churn prediction, market basket analysis, recommendation systems, and purchasing trend analysis etc. The dataset is well-structured in tabular form, where each row represents a unique transaction made by a customer, and each column captures a specific attribute related to the transaction, the customer, or their purchase behaviour.
+
+The dataset spans multiple relevant aspects of customer purchasing behaviour. Key features include customer demographic information such as Customer ID, Customer Name, Age, and Gender, along with transactional data like Purchase Date, Product Category, Product Price, Quantity, and Total Purchase Amount. It also includes behavioural indicators such as Payment Method, returns and customer churn. These features collectively allow for in-depth analyses of consumer habits and provide a strong foundation for predictive modelling.
+
+Two sets of datasets comprising 250000 records and 13 columns are provided. Given its use case in modelling customer behaviour over time, it can be assumed that it spans a large number of records to accurately simulate e-commerce activities across different customers and timeframes.
+
+### Project Objectives
+
+1. To identify factors influencing customer churn, helping businesses improve retention strategies.
+
+2. To model user behavior using classification and regression techniques to predict important customer outcomes.
+
+
+```{r }
+# Reading the dataset
+df <- read.csv("ecommerce_customer_data_large.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
+# Load necessary libraries
+library(tidyverse)   # For data manipulation and visualization
+library(caret)       # For machine learning functions
+library(e1071)       # For SVM and other ML models
+library(rpart)       # For decision trees
+library(nnet)        # For neural networks
+library(MASS)        # For logistic regression
+library(ggplot2)     # For visualization
+library(dplyr)       # For data wrangling```
+library(lubridate)
+```
+
+```{r}
+# View structure and summary (df)
+
+# Structure (data types)
+str(df)
+
+# Quick overview
+glimpse(df)
+
+# Descriptive statistics
+summary(df)
+
+# Dimensions: Rows and Columns
+dim(df)
+
+# Column Names
+colnames(df)
+
+# Check for first few columns
+head(df)
+```
+
+### Data Cleaning & Preprocessing
+
+* Data Cleaning
+
+Removing duplicates
+
+Handling missing values
+
+Fixing column names or formats
+
+Converting data types (e.g., character to date)
+
+Drop similar column (e.g., Customer_Age)
+
+* Data Preprocessing
+
+Encoding categorical variables into numeric formats
+
+Feature scaling (normalization/standardization)
+
+Creating new features
+
+Binning or discretizing variables
+
+```{r}
+# Check how many duplicate rows exist
+sum(duplicated(df))
+```
+
+```{r}
+# Check for missing values
+colSums(is.na(df))
+```
+
+```{r}
+# Check rows with missing values in 'Returns'
+missing_rows <- df[is.na(df$Returns), ]
+
+ # View the first few rows with missing values
+head(missing_rows)
+```
+
+```{r}
+# Replace all dots with underscores in column names
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+# Check the column name after change
+colnames(df)
+```
+
+```{r}
+# Convert data types
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Returns <- as.integer(df$Returns)
+
+# Create new features
+# Extract components
+df$Purchase_Day_Name <- weekdays(df$Purchase_Date)
+df$Purchase_Month <- month(df$Purchase_Date)
+df$Purchase_Month_Name <- month(df$Purchase_Date, label = TRUE, abbr = FALSE)
+df$Purchase_Year <- format(df$Purchase_Date, "%Y")
+head(df)
+```
+
+```{r}
+# Check for total number of numerical features and categorical features in the dataset
+num_features <- sum(sapply(df, is.numeric))
+cat_features <- sum(sapply(df, function(x) is.factor(x) || is.character(x)))
+
+cat("Numerical features:", num_features, "\n")
+cat("Categorical features:", cat_features, "\n")
+```
+
+```{r}
+# Show the names of the numerical and categorical features
+numerical_features <- names(df)[sapply(df, is.numeric)]
+categorical_features <- names(df)[sapply(df, function(x) is.factor(x) || is.character(x))]
+
+cat("Numerical Features:\n")
+print(numerical_features)
+
+cat("\nCategorical Features:\n")
+print(categorical_features)
+```
+
+```{r}
+# Count the total number of churn and return
+# Total Churned
+sum(df$Churn == 1)
+
+# Total Returned
+sum(df$Returns == 1)
+```
+
+Notice that for the sum of returned, the result showed , which means there is NA in the dataset for 'Returns'
+
+```{r}
+# Count the total number of return (only with value, set na.rm to TRUE)
+total_returns <- sum(df$Returns == 1, na.rm = TRUE)
+print(total_returns)
+```
+
+```{r}
+# Assuming the NA (missing value) is no return, we fill up with '0'
+df$Returns[is.na(df$Returns)] <- 0
+total_returns <- sum(df$Returns == 1)
+print(total_returns)
+```
+
+```{r}
+# Check whether there is still NA in the dataset
+sum(is.na(df$returns))
+```
+
+```{r}
+# Count the total number of churn and return
+# Total Churned
+sum(df$Churn == 1)
+
+# Total Returned
+sum(df$Returns == 1)
+```
+
+There is no NA value in the dataset anymore, which means we successfully fill up missing value with '0'
+There is a total of 101476 of returns.
+
+
+### DATA ANALYSIS - EDA
+
+Total Revenue and Average Revenue
+```{r}
+# Calculate for total revenue and average revenue
+
+# Total Revenue
+total_revenue <- sum(df$Total_Purchase_Amount, na.rm = TRUE)
+print(total_revenue)
+# Average Revenue
+average_revenue <- mean(df$Total_Purchase_Amount, na.rm = TRUE)
+print(average_revenue)
+```
+
+Top 5 Spending Customers
+```{r}
+# Show the top 5 spending customers
+
+top_customers <- df %>%
+  group_by(Customer_ID, Customer_Name) %>%
+  summarise(Total_Spending = sum(Total_Purchase_Amount, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(Total_Spending)) %>%
+  slice_head(n = 5)
+
+top_customers
+```
+
+```{r}
+# Plot bar graph
+ggplot(top_customers, aes(x = reorder(Customer_Name, -Total_Spending), y = Total_Spending, fill = Customer_Name)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Highest Spending Customers",
+       x = "Customer Name",
+       y = "Total Spending") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_text(aes(label = round(Total_Spending, 2)), vjust = -0.3)
+```
+Busiest Sales Day of the Week
+```{r}
+# Determine the Busiest Sales Day of the week
+sales_by_day <- df %>%
+  group_by(Purchase_Day_Name) %>%
+  summarise(Total_Sales = sum(Total_Purchase_Amount, na.rm = TRUE)) %>%
+  arrange(desc(Total_Sales))
+
+# Show result
+print(sales_by_day)
+```
+
+```{r}
+# Reorder factor based on Total_Sales (in descending order)
+sales_by_day$Purchase_Day_Name <- factor(sales_by_day$Purchase_Day_Name, levels = sales_by_day$Purchase_Day_Name)
+
+# Plot bar graph
+ggplot(sales_by_day, aes(x = Purchase_Day_Name, y = Total_Sales, fill = Purchase_Day_Name)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Sales by Day of the Week", x = "Day", y = "Total Sales") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Product Category
+```{r}
+# List out all the product category
+df %>%
+  distinct(Product_Category)
+```
+
+```{r}
+# Count products per category
+category_counts <- df %>%
+  group_by(Product_Category) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = Count / sum(Count) * 100,
+         Label = paste0(Product_Category, " (", round(Percentage, 1), "%)"))
+
+# Plot pie chart
+ggplot(category_counts, aes(x = "", y = Count, fill = Product_Category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.5), size = 4) +
+  labs(title = "Product Category Distribution") +
+  theme_void()
+```
+
+Payment Type
+```{r}
+# List out all the payment type
+df %>%
+  distinct(Payment_Method)
+```
+
+```{r}
+# Count number of transactions per payment method
+payment_counts <- df %>%
+  group_by(Payment_Method) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count))
+
+# Plot bar graph
+ggplot(payment_counts, aes(x = reorder(Payment_Method, -Count), y = Count, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Transaction Count by Payment Method",
+       x = "Payment Method",
+       y = "Number of Transactions") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_text(aes(label = Count), vjust = -0.3)
+```
+
+Univariate Analysis (Numerical Variables)
+Univariate Analysis
+
+Numerical Variables (Customer_Age, Product_Price, Total_Purchase_Amount)
+• Understand distribution, outliers, and spread
+
+hist(): Used to visualize the distribution of a numerical feature.
+
+boxplot(): Used to detect outliers and visualize spread.
+
+summary(): Provides a quick overview of key statistics like mean, median, and quartiles.
+
+```{r}
+# Customer Age Histogram
+hist(df$Age,
+     main = "Histogram of Customer Age",
+     xlab = "Customer Age",
+     col = "lightblue",
+     border = "black",
+     breaks = 15)  # Adjust number of bins with breaks
+
+# Product Price Histogram
+hist(df$Product_Price,
+     main = "Histogram of Product Price",
+     xlab = "Product Price",
+     col = "lightgreen",
+     border = "black",
+     breaks = 20)
+
+# Total Purchase Amount Histogram
+hist(df$Total_Purchase_Amount,
+     main = "Histogram of Total Purchase Amount",
+     xlab = "Total Purchase Amount",
+     col = "lightcoral",
+     border = "black",
+     breaks = 25)
+```
+
+```{r}
+# Customer Age Boxplot
+boxplot(df$Age,
+        main = "Boxplot of Customer Age",
+        ylab = "Customer Age",
+        col = "lightblue",
+        border = "blue")
+
+# Product Price Boxplot
+boxplot(df$Product_Price,
+        main = "Boxplot of Product Price",
+        ylab = "Product Price",
+        col = "lightgreen",
+        border = "green")
+
+# Total Purchase Amount Boxplot
+boxplot(df$Total_Purchase_Amount,
+        main = "Boxplot of Total Purchase Amount",
+        ylab = "Total Purchase Amount",
+        col = "lightcoral",
+        border = "red")
+```
+
+```{r}
+# Summary for Customer Age
+summary(df$Age)
+
+# Summary for Product Price
+summary(df$Product_Price)
+
+# Summary for Total Purchase Amount
+summary(df$Total_Purchase_Amount)
+```
+
+Univariate Analysis (Categorical Variables)
+Categorical Variables (Gender, Product_Category, Payment_Method, Returns, Churn)
+• See frequency of categories
+
+table(): Generates a frequency table for categorical data, showing how many times each category appears.
+
+barplot(): Visualizes categorical data using bar charts.
+
+prop.table(): Converts the frequency table to proportions (useful for relative frequency analysis).
+
+```{r}
+# Frequency Table for Gender
+table(df$Gender)
+
+# Frequency Table for Product Category
+table(df$Product_Category)
+
+# Frequency Table for Payment Method
+table(df$Payment_Method)
+
+# Frequency Table for Returns
+table(df$Returns)
+
+# Frequency Table for Churn
+table(df$Churn)
+```
+
+```{r}
+# Bar Plot for Gender
+gender_counts <- table(df$Gender)
+barplot(gender_counts,
+        main = "Gender Distribution",
+        col = c("lightblue", "lightgreen"),
+        xlab = "Gender",
+        ylab = "Count",
+        names.arg = names(gender_counts))
+
+# Bar Plot for Product Category
+product_category_counts <- table(df$Product_Category)
+barplot(product_category_counts,
+        main = "Product Category Distribution",
+        col = rainbow(length(product_category_counts)),
+        xlab = "Product Category",
+        ylab = "Count",
+        las = 2)  # Rotate axis labels for better readability
+
+# Bar Plot for Payment Method
+payment_method_counts <- table(df$Payment_Method)
+barplot(payment_method_counts,
+        main = "Payment Method Distribution",
+        col = c("lightblue", "lightcoral", "lightgreen"),
+        xlab = "Payment Method",
+        ylab = "Count",
+        names.arg = names(payment_method_counts))
+# Bar Plot for Returns
+returns_counts <- table(df$Returns)
+barplot(returns_counts,
+        main = "Returns Distribution",
+        col = c("lightblue", "lightpink"),
+        xlab = "Returns",
+        ylab = "Count",
+        names.arg = names(returns_counts))
+
+# Bar Plot for Churn
+churn_counts <- table(df$Churn)
+barplot(churn_counts,
+        main = "Churn Distribution",
+        col = c("lightgreen", "lightcoral"),
+        xlab = "Churn",
+        ylab = "Count",
+        names.arg = names(churn_counts))
+```
+
+```{r}
+# Bar Plot with Proportions for Gender
+gender_proportions <- prop.table(table(df$Gender))
+barplot(gender_proportions,
+        main = "Gender Distribution (Proportions)",
+        col = c("lightblue", "lightgreen"),
+        xlab = "Gender",
+        ylab = "Proportion",
+        names.arg = names(gender_proportions))
+
+
+
+# Bar Plot with Proportions for Product Category
+product_category_proportions <- prop.table(table(df$Product_Category))
+barplot(product_category_proportions,
+        main = "Product Category Distribution (Proportions)",
+        col = c("lightblue", "lightgreen"),
+        xlab = "Product Category",
+        ylab = "Proportion",
+        names.arg = names(product_category_proportions))
+
+
+# Bar Plot with Proportions for Payment Method
+payment_method_proportions <- prop.table(table(df$Payment_Method))
+barplot(payment_method_proportions,
+        main = "Payment Method Distribution (Proportions)",
+        col = c("lightblue", "lightgreen"),
+        xlab = "Payment Method",
+        ylab = "Proportion",
+        names.arg = names(payment_method_proportions))
+
+# Bar Plot with Proportions for Returns
+returns_proportions <- prop.table(table(df$Returns))
+barplot(returns_proportions,
+        main = "Payment Method Distribution (Proportions)",
+        col = c("lightblue", "lightgreen"),
+        xlab = "Returns",
+        ylab = "Proportion",
+        names.arg = names(returns_proportions))
+
+
+# Bar Plot with Proportions for Churn
+churn_proportions <- prop.table(table(df$Churn))
+barplot(churn_proportions,
+        main = "Churn Distribution (Proportions)",
+        col = c("lightgreen", "lightcoral"),
+        xlab = "Churn",
+        ylab = "Proportion",
+        names.arg = names(churn_proportions))
+```
+
+Bivariate Analysis (Churn VS Features)
+
+```{r}
+# Boxplot to compare Total Purchase Amount by Churn status
+boxplot(Total_Purchase_Amount ~ Churn,
+        data = df,
+        main = "Comparison of Total Purchase Amount by Churn Status",
+        xlab = "Churn",
+        ylab = "Total Purchase Amount",
+        col = c("lightblue", "lightcoral"),
+        names = c("Non-Churned", "Churned"))
+
+# Boxplot for Customer Age vs. Churn status
+boxplot(Age ~ Churn,
+        data = df,
+        main = "Comparison of Customer Age by Churn Status",
+        xlab = "Churn",
+        ylab = "Customer Age",
+        col = c("lightblue", "lightcoral"),
+        names = c("Non-Churned", "Churned"))
+
+# Boxplot for Product Price vs. Churn status
+boxplot(Product_Price ~ Churn,
+        data = df,
+        main = "Comparison of Product Price by Churn Status",
+        xlab = "Churn",
+        ylab = "Product Price",
+        col = c("lightblue", "lightcoral"),
+        names = c("Non-Churned", "Churned"))
+```
+
+```{r}
+library(RColorBrewer)
+
+# Create a bar plot for Gender vs Churn
+gender_churn_table <- table(df$Gender, df$Churn)
+barplot(gender_churn_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral"),
+        legend = rownames(gender_churn_table),
+        main = "Gender vs Churn",
+        xlab = "Churn Status",
+        ylab = "Count",
+        names.arg = c("Non-Churned", "Churned"))
+
+# Create a bar plot for Payment Method vs Churn
+payment_method_churn_table <- table(df$Payment_Method, df$Churn)
+barplot(payment_method_churn_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral", "lightyellow"),
+        legend = rownames(payment_method_churn_table),
+        main = "Payment Method vs Churn",
+        xlab = "Payment Method Status",
+        ylab = "Count",
+        names.arg = c("Non-Churned", "Churned"))
+
+# Create a bar plot for Product Category vs Churn
+product_category_churn_table <- table(df$Product_Category, df$Churn)
+barplot(product_category_churn_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral", "lightyellow", "lightgreen"),
+        legend = rownames(product_category_churn_table),
+        main = "Product Category vs Churn",
+        xlab = "Churn Status",
+        ylab = "Count",
+        names.arg = c("Non-Churned", "Churned"))
+
+# Create a bar plot for Purchase Month Name vs Churn
+month_colors <- brewer.pal(12, "Set3")
+purchase_month_name_churn_table <- table(df$Purchase_Month_Name, df$Churn)
+barplot(purchase_month_name_churn_table,
+        beside = TRUE,
+        col = month_colors,
+        legend = rownames(purchase_month_name_churn_table),
+        main = "Purchase Month Name vs Churn",
+        xlab = "Churn Status",
+        ylab = "Count",
+        names.arg = c("Non-Churned", "Churned"))
+```
+
+Bivariate Analysis (Return VS Features)
+```{r}
+# Boxplot to compare Total Purchase Amount by Return status
+boxplot(Total_Purchase_Amount ~ Returns,
+        data = df,
+        main = "Comparison of Total Purchase Amount by Return Status",
+        xlab = "Return",
+        ylab = "Total Purchase Amount",
+        col = c("lightblue", "lightcoral"),
+        names = c("Non-Returned", "Returned"))
+
+# Boxplot for Customer Age vs. Return status
+boxplot(Age ~ Returns,
+        data = df,
+        main = "Comparison of Customer Age by Return Status",
+        xlab = "Return",
+        ylab = "Customer Age",
+        col = c("lightblue", "lightcoral"),
+        names = c("Non-Returned", "Returned"))
+
+# Boxplot for Product Price vs. Return status
+boxplot(Product_Price ~ Returns,
+        data = df,
+        main = "Comparison of Product Price by Return Status",
+        xlab = "Return",
+        ylab = "Product Price",
+        col = c("lightblue", "lightcoral"),
+        nnames = c("Non-Returned", "Returned"))
+```
+
+```{r}
+# Contingency table for Gender vs Returns
+table(df$Gender, df$Returns)
+
+# Contingency table for Payment Method vs Returns
+table(df$Payment_Method, df$Returns)
+
+# Contingency table for Product Category vs Returns
+table(df$Product_Category, df$Returns)
+
+# Contingency table for Purchase Month Name vs Returns
+table(df$Purchase_Month_Name, df$Returns)
+```
+
+```{r}
+# Create a bar plot for Gender vs Returns
+gender_returns_table <- table(df$Gender, df$Returns)
+barplot(gender_returns_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral"),
+        legend = rownames(gender_returns_table),
+        main = "Gender vs Returns",
+        xlab = "Returns Status",
+        ylab = "Count",
+        names.arg = c("Non-Returned", "Returned"))
+
+# Create a bar plot for Payment Method vs Returns
+payment_method_returns_table <- table(df$Payment_Method, df$Returns)
+barplot(payment_method_returns_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral", "lightyellow"),
+        legend = rownames(payment_method_returns_table),
+        main = "Payment Method vs Returns",
+        xlab = "Returns Status",
+        ylab = "Count",
+        names.arg = c("Non-Returned", "Returned"))
+# Create a bar plot for Product Category vs Returns
+product_category_returns_table <- table(df$Product_Category, df$Returns)
+barplot(product_category_returns_table,
+        beside = TRUE,
+        col = c("lightblue", "lightcoral", "lightyellow", "lightgreen"),
+        legend = rownames(product_category_returns_table),
+        main = "Product Category vs Returns",
+        xlab = "Returns Status",
+        ylab = "Count",
+        names.arg = c("Non-Returned", "Returned"))
+
+# Create a bar plot for Purchase Month Name vs Returns
+month_colors <- brewer.pal(12, "Set3")
+purchase_month_name_returns_table <- table(df$Purchase_Month_Name, df$Returns)
+barplot(purchase_month_name_returns_table,
+        beside = TRUE,
+        col = month_colors,
+        legend = rownames(purchase_month_name_returns_table),
+        main = "Purchase Month Name vs Returns",
+        xlab = "Returns Status",
+        ylab = "Count",
+        names.arg = c("Non-Returned", "Returned"))
+```
+
+Return Rate
+Return Rate (by product category, gender, purchase month name, payment method)
+```{r}
+# Return rate by product category
+return_rate <- df %>%
+  group_by(Product_Category) %>%
+  summarise(Returns = sum(Returns == "1", na.rm = TRUE),
+            Total_Orders = n(),
+            Return_Rate = Returns / Total_Orders)
+
+print(return_rate)
+```
+
+```{r}
+# Return rate by gender
+return_rate_gender <- df %>%
+  group_by(Gender) %>%
+  summarise(Returns = sum(Returns == "1", na.rm = TRUE),
+            Total_Orders = n(),
+            Return_Rate = Returns / Total_Orders)
+
+print(return_rate_gender)
+```
+
+```{r}
+ggplot(return_rate_gender, aes(x = Gender, y = Return_Rate, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Return Rate by Gender", x = "Gender", y = "Return Rate") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+```{r}
+# Return rate by purchase month name
+return_rate_month <- df %>%
+  group_by(Purchase_Month_Name) %>%
+  summarise(Returns = sum(Returns == "1", na.rm = TRUE),
+            Total_Orders = n(),
+            Return_Rate = Returns / Total_Orders)
+
+print(return_rate_month)
+```
+
+
+```{r}
+return_rate_month$Purchase_Month_Name <- factor(return_rate_month$Purchase_Month_Name, levels = month.name)
+
+ggplot(return_rate_month, aes(x = Purchase_Month_Name, y = Return_Rate, fill = Purchase_Month_Name)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Return Rate by Month", x = "Month", y = "Return Rate") +
+  theme_minimal() +
+  scale_fill_manual(values = brewer.pal(12, "Set3")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Return rate by payment method
+return_rate_payment <- df %>%
+  group_by(Payment_Method) %>%
+  summarise(Returns = sum(Returns == "1", na.rm = TRUE),
+            Total_Orders = n(),
+            Return_Rate = Returns / Total_Orders)
+
+print(return_rate_payment)
+```
+
+```{r}
+ggplot(return_rate_payment, aes(x = Payment_Method, y = Return_Rate, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Return Rate by Payment Method", x = "Payment Method", y = "Return Rate") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+Churn Rate
+Churn Rate (by product category, gender, purchase month name, payment method)
+
+```{r}
+# Churn rate by product category
+churn_rate_category <- df %>%
+  group_by(Product_Category) %>%
+  summarise(Churned = sum(Churn == "1", na.rm = TRUE),
+            Total_Customers = n(),
+            Churn_Rate = Churned / Total_Customers)
+
+print(churn_rate_category)
+```
+
+```{r}
+ggplot(churn_rate_category, aes(x = reorder(Product_Category, -Churn_Rate), y = Churn_Rate, fill = Product_Category)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Churn Rate by Product Category", x = "Product Category", y = "Churn Rate") +
+  theme_minimal() +
+  scale_fill_manual(values = brewer.pal(n = min(12, length(unique(churn_rate_category$Product_Category))), name = "Set3")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+```
+
+```{r}
+# Churn rate by gender
+churn_rate_gender <- df %>%
+  group_by(Gender) %>%
+  summarise(Churned = sum(Churn == "1", na.rm = TRUE),
+            Total_Customers = n(),
+            Churn_Rate = Churned / Total_Customers)
+
+print(churn_rate_gender)
+```
+
+```{r}
+ggplot(churn_rate_gender, aes(x = Gender, y = Churn_Rate, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Churn Rate by Gender", x = "Gender", y = "Churn Rate") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+```{r}
+# Churn rate by purchase month name
+churn_rate_month <- df %>%
+  group_by(Purchase_Month_Name) %>%
+  summarise(Churned = sum(Churn == "1", na.rm = TRUE),
+            Total_Customers = n(),
+            Churn_Rate = Churned / Total_Customers)
+
+# Sort month names properly
+churn_rate_month$Purchase_Month_Name <- factor(churn_rate_month$Purchase_Month_Name, levels = month.name)
+
+print(churn_rate_month)
+```
+
+```{r}
+ggplot(churn_rate_month, aes(x = Purchase_Month_Name, y = Churn_Rate, fill = Purchase_Month_Name)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Churn Rate by Month", x = "Month", y = "Churn Rate") +
+  theme_minimal() +
+  scale_fill_manual(values = brewer.pal(12, "Set3")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Churn rate by payment method
+churn_rate_payment <- df %>%
+  group_by(Payment_Method) %>%
+  summarise(Churned = sum(Churn == "1", na.rm = TRUE),
+            Total_Customers = n(),
+            Churn_Rate = Churned / Total_Customers)
+
+print(churn_rate_payment)
+```
+
+```{r}
+ggplot(churn_rate_payment, aes(x = Payment_Method, y = Churn_Rate, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Churn Rate by Payment Method", x = "Payment Method", y = "Churn Rate") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+
+### Data Modelling
+
+#### 1. Classification (Churn Prediction)
+
+```{r}
+# Required libraries
+library(caret) # Classification and Regression Training
+library(e1071) # Tools for SVM, Naive Bayes, and more
+library(randomForest) # Random Forest Algorithm
+library(xgboost) # Extreme Gradient Boosting
+library(MLmetrics) # Evaluation Metrics for ML Models
+library(lubridate)
+library(dplyr)
+```
+
+```{r}
+# Load and Prepare Data
+df <- read.csv("ecommerce_customer_data_large.csv", stringsAsFactors = FALSE)
+colnames(df) <- gsub("\\.", "_", colnames(df))
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Returns <- as.integer(df$Returns)
+df <- df %>% dplyr::select(-Customer_Age)
+```
+
+```{r}
+# Convert relevant columns to factors
+df$Gender <- as.factor(df$Gender)
+df$Payment_Method <- as.factor(df$Payment_Method)
+df$Product_Category <- as.factor(df$Product_Category)
+df$Churn <- as.factor(df$Churn) # Target
+```
+
+```{r}
+# Train-test split
+set.seed(42)
+trainIndex <- createDataPartition(df$Churn, p = 0.80, list = FALSE)
+train <- df[trainIndex, ]
+test <- df[-trainIndex, ]
+
+# Select relevant features
+selected_vars <- c("Churn", "Product_Category", "Product_Price", "Quantity",
+                   "Total_Purchase_Amount", "Payment_Method", "Age", "Gender")
+train <- train[, selected_vars]
+test <- test[, selected_vars]
+```
+
+
+Customer Churn (Classification)
+
+Model to be use:
+1. Logistic Regression
+2. Random Forest
+3. XGBoost
+
+
+##### 1. Logistic Regression (Churn Prediction)
+
+```{r}
+# Fit model
+model_log <- glm(
+  Churn ~ ., data = train, family = "binomial"
+)
+
+# Predict on test data
+pred_prob_log <- predict(model_log, newdata = test, type = "response")
+pred_log <- factor(ifelse(pred_prob_log > 0.5, "1", "0"), levels = levels(test$Churn))
+
+# Evaluation
+conf_mat_log <- confusionMatrix(pred_log, test$Churn, positive = "1")
+print(conf_mat_log)
+
+# Metrics
+accuracy_log <- conf_mat_log$overall["Accuracy"]
+precision_log <- conf_mat_log$byClass["Pos Pred Value"]
+recall_log <- conf_mat_log$byClass["Sensitivity"]
+f1_log <- 2 * ((precision_log * recall_log) / (precision_log + recall_log))
+
+cat("\n--- Logistic Regression Metrics ---\n")
+cat("Accuracy:", accuracy_log, "\n")
+cat("Precision:", precision_log, "\n")
+cat("Recall:", recall_log, "\n")
+cat("F1 Score:", f1_log, "\n")
+```
+
+
+##### 2. Random Forest (Churn Prediction)
+
+```{r}
+set.seed(42)
+model_rf <- randomForest(Churn ~ ., data = train, ntree = 100)
+pred_rf <- predict(model_rf, test)
+
+# Evaluation
+conf_mat_rf <- confusionMatrix(pred_rf, test$Churn, positive = "1")
+print(conf_mat_rf)
+
+# Metrics
+accuracy_rf <- conf_mat_rf$overall["Accuracy"]
+precision_rf <- conf_mat_rf$byClass["Pos Pred Value"]
+recall_rf <- conf_mat_rf$byClass["Sensitivity"]
+f1_rf <- 2 * ((precision_rf * recall_rf) / (precision_rf + recall_rf))
+
+cat("\n--- Random Forest Metrics ---\n")
+cat("Accuracy:", accuracy_rf, "\n")
+cat("Precision:", precision_rf, "\n")
+cat("Recall:", recall_rf, "\n")
+cat("F1 Score:", f1_rf, "\n")
+```
+
+
+##### 3. XGBoost (Churn Prediction)
+
+```{r}
+# Prepare design matrices
+train_matrix <- model.matrix(Churn ~ . -1, data = train)
+test_matrix <- model.matrix(Churn ~ . -1, data = test)
+
+# Prepare binary labels
+train_label <- ifelse(train$Churn == "1", 1, 0)
+test_label <- ifelse(test$Churn == "1", 1, 0)
+
+# DMatrix objects
+dtrain <- xgb.DMatrix(data = train_matrix, label = train_label)
+dtest <- xgb.DMatrix(data = test_matrix, label = test_label)
+
+# Set parameters and train
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss"
+)
+
+set.seed(42)
+model_xgb <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 100,
+  verbose = 0
+)
+
+# Predict
+pred_prob_xgb <- predict(model_xgb, dtest)
+pred_xgb <- factor(ifelse(pred_prob_xgb > 0.5, "1", "0"), levels = levels(test$Churn))
+
+# Evaluation
+conf_mat_xgb <- confusionMatrix(pred_xgb, test$Churn, positive = "1")
+print(conf_mat_xgb)
+
+# Metrics
+accuracy_xgb <- conf_mat_xgb$overall["Accuracy"]
+precision_xgb <- conf_mat_xgb$byClass["Pos Pred Value"]
+recall_xgb <- conf_mat_xgb$byClass["Sensitivity"]
+f1_xgb <- 2 * ((precision_xgb * recall_xgb) / (precision_xgb + recall_xgb))
+
+cat("\n--- XGBoost Metrics ---\n")
+cat("Accuracy:", accuracy_xgb, "\n")
+cat("Precision:", precision_xgb, "\n")
+cat("Recall:", recall_xgb, "\n")
+cat("F1 Score:", f1_xgb, "\n")
+```
+
+
+##### Summary Table
+
+```{r}
+# Extract and compute metrics after each model evaluation
+
+# Logistic Regression
+log_accuracy <- as.numeric(conf_mat_log$overall["Accuracy"])
+log_precision <- as.numeric(conf_mat_log$byClass["Pos Pred Value"])
+log_recall <- as.numeric(conf_mat_log$byClass["Sensitivity"])
+log_f1 <- 2 * ((log_precision * log_recall) / (log_precision + log_recall))
+
+# Random Forest
+rf_accuracy <- as.numeric(conf_mat_rf$overall["Accuracy"])
+rf_precision <- as.numeric(conf_mat_rf$byClass["Pos Pred Value"])
+rf_recall <- as.numeric(conf_mat_rf$byClass["Sensitivity"])
+rf_f1 <- 2 * ((rf_precision * rf_recall) / (rf_precision + rf_recall))
+
+# XGBoost
+xgb_accuracy <- as.numeric(conf_mat_xgb$overall["Accuracy"])
+xgb_precision <- as.numeric(conf_mat_xgb$byClass["Pos Pred Value"])
+xgb_recall <- as.numeric(conf_mat_xgb$byClass["Sensitivity"])
+xgb_f1 <- 2 * ((xgb_precision * xgb_recall) / (xgb_precision + xgb_recall))
+
+# Create summary table
+summary_table <- data.frame(
+  Model = c("Logistic Regression", "Random Forest", "XGBoost"),
+  Accuracy = c(log_accuracy, rf_accuracy, xgb_accuracy),
+  Precision = c(log_precision, rf_precision, xgb_precision),
+  Recall = c(log_recall, rf_recall, xgb_recall),
+  F1_Score = c(log_f1, rf_f1, xgb_f1),
+  stringsAsFactors = FALSE
+)
+
+# Round numeric columns
+summary_table[, 2:5] <- round(summary_table[, 2:5], 6)
+
+# View summary
+print(summary_table)
+xgb_accuracy <- conf_mat_xgb$overall["Accuracy"]
+xgb_precision <- conf_mat_xgb$byClass["Pos Pred Value"]
+xgb_recall <- conf_mat_xgb$byClass["Sensitivity"]
+xgb_f1 <- 2 * ((xgb_precision * xgb_recall) / (xgb_precision + xgb_recall))
+```
+
+#### SMOTE
+```{r}
+# Read the file
+df <- read.csv("ecommerce_customer_data_large.csv")
+head(df)
+
+# Clean column names
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+
+# Convert data types
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Returns[is.na(df$Returns)] <- 0
+df$Returns <- as.integer(df$Returns)
+
+# Drop redundant column
+df <- df %>% dplyr::select(-Customer_Age)
+
+# Extract date-related features
+df$Purchase_Day_Name <- weekdays(df$Purchase_Date)
+df$Purchase_Month <- month(df$Purchase_Date)
+df$Purchase_Month_Name <- month(df$Purchase_Date, label = TRUE, abbr = FALSE)
+df$Purchase_Year <- format(df$Purchase_Date, "%Y")
+
+# Drop non-numeric or unnecessary columns for modeling
+df_numeric <- df %>% dplyr::select(-Purchase_Date)
+
+# Convert all character/factor variables to numeric
+df_numeric[] <- lapply(df_numeric, function(x) {
+  if (is.factor(x) || is.character(x)) {
+    return(as.numeric(as.factor(x)))
+  } else {
+    return(x)
+  }
+})
+```
+
+```{r}
+#load SMOTE library
+library(smotefamily)
+```
+
+```{r}
+# Apply SMOTE
+set.seed(42)
+smote_result <- SMOTE(
+  X = df_numeric[, -which(names(df_numeric) == "Churn")],
+  target = df_numeric$Churn,
+  K = 5
+)
+
+df_smote <- smote_result$data
+df_smote$Churn <- factor(df_smote$class, levels = c(0, 1))
+df_smote$class <- NULL
+
+# Split data
+set.seed(42)
+trainIndex <- createDataPartition(df_smote$Churn, p = 0.8, list = FALSE)
+train_smote <- df_smote[trainIndex, ]
+test_smote <- df_smote[-trainIndex, ]
+```
+
+
+##### 1. Logistic Regression (with SMOTE)
+
+```{r}
+model_log <- glm(Churn ~ ., data = train_smote, family = "binomial")
+pred_prob_log <- predict(model_log, newdata = test_smote, type = "response")
+pred_log <- factor(ifelse(pred_prob_log > 0.5, "1", "0"), levels = c("0", "1"))
+test_smote$Churn <- factor(test_smote$Churn, levels = c("0", "1"))
+conf_log <- confusionMatrix(pred_log, test_smote$Churn, positive = "1")
+
+# Metrics
+f1_log <- 2 * (conf_log$byClass["Pos Pred Value"] * conf_log$byClass["Sensitivity"]) /
+  (conf_log$byClass["Pos Pred Value"] + conf_log$byClass["Sensitivity"])
+```
+
+##### 2. Random Forest (with SMOTE)
+
+```{r}
+model_rf <- randomForest(Churn ~ ., data = train_smote, ntree = 100)
+pred_rf <- predict(model_rf, test_smote)
+pred_rf <- factor(pred_rf, levels = c("0", "1"))
+conf_rf <- confusionMatrix(pred_rf, test_smote$Churn, positive = "1")
+f1_rf <- 2 * (conf_rf$byClass["Pos Pred Value"] * conf_rf$byClass["Sensitivity"]) /
+  (conf_rf$byClass["Pos Pred Value"] + conf_rf$byClass["Sensitivity"])
+```
+
+##### 3. XGBoost (with SMOTE)
+
+```{r}
+train_matrix <- model.matrix(Churn ~ . -1, data = train_smote)
+test_matrix <- model.matrix(Churn ~ . -1, data = test_smote)
+train_label <- as.numeric(as.character(train_smote$Churn))
+test_label <- as.numeric(as.character(test_smote$Churn))
+dtrain <- xgb.DMatrix(data = train_matrix, label = train_label)
+dtest <- xgb.DMatrix(data = test_matrix, label = test_label)
+
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss"
+)
+
+model_xgb <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 100,
+  verbose = 0
+)
+
+pred_prob_xgb <- predict(model_xgb, dtest)
+pred_xgb <- factor(ifelse(pred_prob_xgb > 0.5, "1", "0"), levels = c("0", "1"))
+conf_xgb <- confusionMatrix(pred_xgb, test_smote$Churn, positive = "1")
+f1_xgb <- 2 * (conf_xgb$byClass["Pos Pred Value"] * conf_xgb$byClass["Sensitivity"]) /
+  (conf_xgb$byClass["Pos Pred Value"] + conf_xgb$byClass["Sensitivity"])
+```
+
+
+##### Summary
+```{r}
+cat("\n--- Logistic Regression Metrics ---\n")
+print(conf_log)
+cat("F1 Score:", f1_log, "\n")
+
+cat("\n--- Random Forest Metrics ---\n")
+print(conf_rf)
+cat("F1 Score:", f1_rf, "\n")
+
+cat("\n--- XGBoost Metrics ---\n")
+print(conf_xgb)
+cat("F1 Score:", f1_xgb, "\n")
+```
+
+
+#### 2. Regression
+
+Finding highest correlation numeric features and categorical features (annova hypo test)
+```{r}
+library(corrplot)
+```
+
+```{r}
+# Correlation matrix for numeric variables (all features do not show any correlation other than age)
+num_vars <- df %>% dplyr::select(where(is.numeric))
+cor_matrix <- cor(num_vars, use = "complete.obs")
+corrplot(cor_matrix, method = "color", tl.cex = 0.8)
+
+# Scatter plots vs. Total Purchase Amount
+ggplot(df, aes(x = Product_Price, y = Total_Purchase_Amount)) +
+  geom_point(alpha = 0.5) + geom_smooth(method = "lm")
+
+ggplot(df, aes(x = Quantity, y = Total_Purchase_Amount)) +
+  geom_point(alpha = 0.5) + geom_smooth(method = "lm")
+
+ggplot(df, aes(x = Age, y = Total_Purchase_Amount)) +
+  geom_point(alpha = 0.5) + geom_smooth(method = "lm")
+
+```
+
+```{r}
+# Correlations with the target variable
+target_corr <- cor_matrix[, "Total_Purchase_Amount"]
+# Sort in decreasing order
+sorted_corr <- sort(abs(target_corr), decreasing = TRUE)
+print(sorted_corr)
+# highest correlation - age (0.056), Purchase_month (0.0016)
+```
+
+```{r}
+# to test the significant imapct of categorical features
+#(using annova) (paymentMethod show highest impact, lowest p value)
+
+# Convert categorical variables to factors
+df$Product_Category <- as.factor(df$Product_Category)
+df$Payment_Method <- as.factor(df$Payment_Method)
+df$Gender <- as.factor(df$Gender)
+
+# Convert Purchase_Date to date format and extract useful features
+df$Purchase_Date <- as.POSIXct(df$Purchase_Date)
+df$Purchase_Year <- as.factor(format(df$Purchase_Date, "%Y"))
+df$Purchase_Month <- as.factor(format(df$Purchase_Date, "%m"))
+df$Purchase_Day <- as.factor(format(df$Purchase_Date, "%d"))
+df$Purchase_Weekday <- as.factor(weekdays(df$Purchase_Date))
+
+# For each categorical variable, perform ANOVA with Total_Purchase_Amount
+anova_results <- aov(Total_Purchase_Amount ~ Product_Category, data = df)
+summary(anova_results)
+
+anova_results <- aov(Total_Purchase_Amount ~ Payment_Method, data = df)
+summary(anova_results)
+
+anova_results <- aov(Total_Purchase_Amount ~ Gender, data = df)
+summary(anova_results)
+# best pvalue - product_category and payment method (0.0782 and 0.0029 respectively)
+```
+Keep the most statistically relevant feautures
+
+1. Age
+2. Product_Category
+3. Payment_Method
+```{r}
+colnames(df)
+```
+
+```{r}
+# Read the file
+df_model <- df %>%
+  dplyr::select(Total_Purchase_Amount, Age, Product_Category, Payment_Method) %>%
+  na.omit()
+df_model$Product_Category <- as.factor(df_model$Product_Category)
+df_model$Payment_Method <- as.factor(df_model$Payment_Method)
+
+# Create polynomial terms (Age^2)  for polynomial regression
+#df_model$Customer_Age2 <- df_model$Customer_Age^2
+df_model$Age2 <- df_model$Age^2
+# Split: 80% train / 20% test
+split <- createDataPartition(df_model$Total_Purchase_Amount, p = 0.8, list = FALSE)
+train_data <- df_model[split, ]
+test_data <- df_model[-split, ]
+
+```
+
+
+```{r}
+# Normalize numeric variables for linear models
+
+pre_proc <- preProcess(train_data[, c("Age", "Age2")], method = c("center", "scale"))
+train_data_norm <- train_data
+test_data_norm <- test_data
+
+train_data_norm[, c("Age", "Age2")] <- predict(pre_proc, train_data[, c("Age", "Age2")])
+test_data_norm[, c("Age", "Age2")] <- predict(pre_proc, test_data[, c("Age", "Age2")])
+```
+
+##### 1. Linear Regression
+
+```{r}
+train_control <- trainControl(method = "cv", number = 5)
+model_lm <- train(Total_Purchase_Amount ~ Age + Product_Category + Payment_Method,
+                  data = train_data_norm, method = "lm", trControl = train_control)
+```
+
+##### 2. Polynomial Regression
+
+```{r}
+#model_poly <- train(Total_Purchase_Amount ~ Age + Age2 + Product_Category + Payment_Method,
+                    #data = train_data_norm, method = "lm", trControl = train_control)
+```
+
+##### 3. Random Forest
+```{r}
+tune_grid <- expand.grid(mtry = c(2, 3))
+
+model_rf <- train(
+  Total_Purchase_Amount ~ Age + Product_Category + Payment_Method,
+  data = train_data,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 3),
+  tuneGrid = tune_grid,
+  ntree = 100
+)
+```
+
+
+```{r}
+#model_rf <- train(Total_Purchase_Amount ~ Age + Product_Category + Payment_Method,
+                  #data = train_data,
+                  #method = "rf",
+                  #trControl = train_control)
+```
+
+##### 4. Gradient Boosting (GBM)
+```{r}
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("gbm")
+library(gbm)
+model_gbm <- train(Total_Purchase_Amount ~ Age + Product_Category + Payment_Method,
+                   data = train_data,
+                   method = "gbm",
+                   trControl = train_control,
+                   verbose = FALSE)
+```
+
+
+##### Summary Table
+
+```{r}
+pred_lm   <- predict(model_lm, test_data_norm)
+#pred_poly <- predict(model_poly, test_data_norm)
+pred_rf   <- predict(model_rf, test_data)
+pred_gbm  <- predict(model_gbm, test_data)
+```
+
+```{r}
+install.packages("Metrics")
+library(Metrics)
+library(caret)
+
+results <- data.frame(
+  Model = c("Linear Regression",  "Random Forest", "Gradient Boosting"),
+  RMSE = c(
+    rmse(test_data$Total_Purchase_Amount, pred_lm),
+    rmse(test_data$Total_Purchase_Amount, pred_rf),
+    rmse(test_data$Total_Purchase_Amount, pred_gbm)
+  ),
+  MAE = c(
+    mae(test_data$Total_Purchase_Amount, pred_lm),
+    mae(test_data$Total_Purchase_Amount, pred_rf),
+    mae(test_data$Total_Purchase_Amount, pred_gbm)
+  ),
+  R2 = c(
+    R2(pred_lm, test_data$Total_Purchase_Amount),
+    R2(pred_rf, test_data$Total_Purchase_Amount),
+    R2(pred_gbm, test_data$Total_Purchase_Amount)
+  ),
+  MAPE = c(
+    mape(test_data$Total_Purchase_Amount, pred_lm),
+    mape(test_data$Total_Purchase_Amount, pred_rf),
+    mape(test_data$Total_Purchase_Amount, pred_gbm)
+  )
+)
+
+# Print the results
+print(results)
+```
+
+
+#### 3. Data Modeling - Predictive Analysis
+
+```{r}
+# Using product category as the only independent variable and 'Returns' as the target
+
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(pROC)
+library(xgboost)
+library(e1071)
+```
+
+```{r}
+# Load and Prepare Dataset
+df <- read.csv("ecommerce_customer_data_large.csv")
+
+# Change the colnames with underscore instead of dot
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+# Fill missing Returns with 0
+df$Returns[is.na(df$Returns)] <- 0
+df$Returns <- factor(df$Returns, levels = c(0, 1))  # Ensure correct factor levels
+
+# Convert to factor
+df$Product_Category <- as.factor(df$Product_Category)
+
+# Encode numeric for XGBoost
+df$Product_Category_Num <- as.numeric(df$Product_Category)
+```
+
+```{r}
+# Train-test split (80-20)
+set.seed(42)
+train_index <- createDataPartition(df$Returns, p = 0.8, list = FALSE)
+train_data <- df[train_index, ]
+test_data <- df[-train_index, ]
+```
+
+```{r}
+# Initialize result data frame
+df_metrics <- data.frame(
+  Model = character(),
+  Accuracy = numeric(),
+  Precision = numeric(),
+  Recall = numeric(),
+  F1_Score = numeric(),
+  stringsAsFactors = FALSE
+)
+```
+
+
+##### 1. Logistic Regression
+
+```{r}
+log_model <- glm(Returns ~ Product_Category, data = train_data, family = "binomial")
+log_probs <- predict(log_model, newdata = test_data, type = "response")
+log_preds <- ifelse(log_probs > 0.5, 1, 0)
+cm_log <- confusionMatrix(factor(log_preds), factor(test_data$Returns), positive = "1")
+
+df_metrics <- rbind(df_metrics, data.frame(
+  Model = "Logistic Regression",
+  Accuracy = cm_log$overall["Accuracy"],
+  Precision = cm_log$byClass["Precision"],
+  Recall = cm_log$byClass["Recall"],
+  F1_Score = cm_log$byClass["F1"]
+))
+
+roc_log <- roc(test_data$Returns, log_probs)
+plot(roc_log, main = "ROC Curve Comparison")
+```
+
+
+##### 2. Random Forest
+
+```{r}
+rf_model <- randomForest(Returns ~ Product_Category, data = train_data, ntree = 100)
+rf_probs <- predict(rf_model, newdata = test_data, type = "prob")[,2]
+rf_preds <- ifelse(rf_probs > 0.5, 1, 0)
+cm_rf <- confusionMatrix(factor(rf_preds), factor(test_data$Returns), positive = "1")
+
+df_metrics <- rbind(df_metrics, data.frame(
+  Model = "Random Forest",
+  Accuracy = cm_rf$overall["Accuracy"],
+  Precision = cm_rf$byClass["Precision"],
+  Recall = cm_rf$byClass["Recall"],
+  F1_Score = cm_rf$byClass["F1"]
+))
+
+roc_rf <- roc(test_data$Returns, rf_probs)
+plot(roc_rf, col = "blue", main = "ROC Curve - Random Forest")
+```
+
+##### 3. XGBoost
+
+```{r}
+# Convert Returns to numeric for XGBoost (ensure 0 and 1)
+train_label <- as.numeric(as.character(train_data$Returns))
+test_label <- as.numeric(as.character(test_data$Returns))
+
+# DMatrix for XGBoost
+train_matrix <- xgb.DMatrix(data = as.matrix(train_data$Product_Category_Num), label = train_label)
+test_matrix <- xgb.DMatrix(data = as.matrix(test_data$Product_Category_Num), label = test_label)
+
+# Train XGBoost model
+xgb_model <- xgboost(data = train_matrix, objective = "binary:logistic", nrounds = 50, verbose = 0)
+
+# Predict and evaluate
+xgb_probs <- predict(xgb_model, test_matrix)
+xgb_preds <- ifelse(xgb_probs > 0.5, 1, 0)
+cm_xgb <- confusionMatrix(factor(xgb_preds), factor(test_data$Returns), positive = "1")
+
+# Add to df_metrics
+df_metrics <- rbind(df_metrics, data.frame(
+  Model = "XGBoost",
+  Accuracy = cm_xgb$overall["Accuracy"],
+  Precision = cm_xgb$byClass["Precision"],
+  Recall = cm_xgb$byClass["Recall"],
+  F1_Score = cm_xgb$byClass["F1"]
+))
+
+roc_xgb <- roc(test_data$Returns, xgb_probs)
+plot(roc_xgb, col = "darkgreen", main = "ROC Curve - XGBoost")
+
+print(df_metrics)
+```
+
+```{r}
+# Checking why the result are the same for 3 models
+table(df$Product_Category, df$Returns)
+```
+
+- Analysis showed that return rates across product categories are remarkably similar (~40%), indicating that Product_Category alone is not a strong predictor of return behavior. Recommend to incorporate additional customer, transactional, or product-level features to build a more predictive model.
+
+- Logistic Regression model have poor performance, recommend to use only tree-based models such as random forest and XGBoost.
+
+
+##### Feature Importance
+
+```{r}
+# Using only 4 feature importance (Total_Purchase_Amount, Product_Price, Age, Purchase_Month)
+
+# Load required libraries (4 important features without hyperparameter tuning)
+library(caret)
+library(dplyr)
+library(xgboost)
+library(randomForest)
+library(lubridate)
+
+# Data Preprocessing
+
+# Load your dataset
+df <- read.csv("ecommerce_customer_data_large.csv")
+
+# Replace dots in column names
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+# Fill missing Returns with 0 and convert to integer
+df$Returns[is.na(df$Returns)] <- 0
+df$Returns <- as.integer(df$Returns)
+
+# Convert Purchase_Date and engineer features
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Purchase_Month <- month(df$Purchase_Date)
+df$Purchase_Year <- format(df$Purchase_Date, "%Y")
+
+# Drop Customer_Age
+df <- df %>% dplyr::select(-Customer_Age)
+
+# Select only required features
+df_model <- df %>%
+  dplyr::select(Returns, Total_Purchase_Amount, Product_Price, Age, Purchase_Month)
+
+# Train-test split
+set.seed(123)
+train_index <- createDataPartition(df_model$Returns, p = 0.8, list = FALSE)
+train_data <- df_model[train_index, ]
+test_data  <- df_model[-train_index, ]
+
+# True labels for evaluation
+true_labels <- factor(test_data$Returns, levels = c(0, 1))
+
+# Random Forest
+#set.seed(123)
+#rf_model <- randomForest(as.factor(Returns) ~ ., data = train_data)
+#rf_preds <- predict(rf_model, test_data[, -1])
+set.seed(123)
+train_data_small <- train_data %>% dplyr::sample_frac(0.3)  # use 30% of training data
+rf_model <- randomForest(as.factor(Returns) ~ ., data = train_data_small)
+
+# XGBoost
+train_matrix <- xgb.DMatrix(data = as.matrix(train_data[, -1]), label = train_data$Returns)
+test_matrix <- xgb.DMatrix(data = as.matrix(test_data[, -1]), label = test_data$Returns)
+
+xgb_model <- xgboost(
+  data = train_matrix,
+  objective = "binary:logistic",
+  nrounds = 100,
+  max_depth = 6,
+  eta = 0.1,
+  verbose = 0
+)
+
+xgb_probs <- predict(xgb_model, test_matrix)
+xgb_preds <- ifelse(xgb_probs > 0.5, 1, 0)
+```
+
+```{r}
+length(rf_preds)
+length(xgb_preds)
+length(true_labels)
+```
+
+
+```{r}
+evaluate_model <- function(preds, true_labels, model_name) {
+  preds <- factor(preds, levels = c(0, 1))
+  true_labels <- factor(true_labels, levels = c(0, 1))  # add this to avoid level mismatch
+  cm <- confusionMatrix(preds, true_labels, positive = "1")
+  data.frame(
+    Model = model_name,
+    Accuracy = round(cm$overall["Accuracy"], 4),
+    Precision = round(cm$byClass["Precision"], 4),
+    Recall = round(cm$byClass["Recall"], 4),
+    F1_Score = round(cm$byClass["F1"], 4)
+  )
+}
+```
+
+```{r}
+# Trim true_labels and xgb_preds to match rf_preds
+true_labels_trimmed <- true_labels[1:length(rf_preds)]
+xgb_preds_trimmed <- xgb_preds[1:length(rf_preds)]
+
+# Now evaluate
+results <- bind_rows(
+  evaluate_model(rf_preds, true_labels_trimmed, "Random Forest"),
+  evaluate_model(xgb_preds_trimmed, true_labels_trimmed, "XGBoost")
+)
+```
+
+```{r}
+# Print results
+print(results)
+```
+```{r}
+# Feature Importance (random forest)
+varImpPlot(rf_model)
+
+# Feature Importance (XGBoost)
+importance <- xgb.importance(model = xgb_model)
+xgb.plot.importance(importance)
+```
+
+From both feature importance (from Random Forest and XGBoost), we can observed that Total_Purchase_Amount, Product_Price, Age, Purchase_Month are the top 4 feature importance to be used for predictive analysis.
+
+
+##### Top 4 Feature Importance vs Returns
+
+```{r}
+# Using only 4 feature importance (Total_Purchase_Amount, Product_Price, Age, Purchase_Month)
+
+# Load required libraries (4 important features without hyperparameter tuning)
+library(caret)
+library(dplyr)
+library(xgboost)
+library(randomForest)
+library(lubridate)
+
+# Data Preprocessing
+
+# Load your dataset
+df <- read.csv("ecommerce_customer_data_large.csv")
+
+# Replace dots in column names
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+# Fill missing Returns with 0 and convert to integer
+df$Returns[is.na(df$Returns)] <- 0
+df$Returns <- as.integer(df$Returns)
+
+# Convert Purchase_Date and engineer features
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Purchase_Month <- month(df$Purchase_Date)
+df$Purchase_Year <- format(df$Purchase_Date, "%Y")
+
+# Drop Customer_Age
+df <- df %>% dplyr::select(-Customer_Age)
+
+# Select only required features
+df_model <- df %>%
+  dplyr::select(Returns, Total_Purchase_Amount, Product_Price, Age, Purchase_Month)
+
+# Train-test split
+set.seed(123)
+train_index <- createDataPartition(df_model$Returns, p = 0.8, list = FALSE)
+train_data <- df_model[train_index, ]
+test_data  <- df_model[-train_index, ]
+
+# True labels for evaluation
+true_labels <- factor(test_data$Returns, levels = c(0, 1))
+
+# Random Forest
+#set.seed(123)
+#rf_model <- randomForest(as.factor(Returns) ~ ., data = train_data)
+#rf_preds <- predict(rf_model, test_data[, -1])
+set.seed(123)
+train_sample <- train_data %>% dplyr::sample_frac(0.3)  # Use 30% of data
+rf_model <- randomForest(as.factor(Returns) ~ ., data = train_sample, ntree = 100)
+
+# XGBoost
+train_matrix <- xgb.DMatrix(data = as.matrix(train_data[, -1]), label = train_data$Returns)
+test_matrix <- xgb.DMatrix(data = as.matrix(test_data[, -1]), label = test_data$Returns)
+
+xgb_model <- xgboost(
+  data = train_matrix,
+  objective = "binary:logistic",
+  nrounds = 100,
+  max_depth = 6,
+  eta = 0.1,
+  verbose = 0
+)
+
+xgb_probs <- predict(xgb_model, test_matrix)
+xgb_preds <- ifelse(xgb_probs > 0.5, 1, 0)
+
+# Evaluation Function
+evaluate_model <- function(preds, true_labels, model_name) {
+  preds <- factor(preds, levels = c(0, 1))
+  cm <- confusionMatrix(preds, true_labels, positive = "1")
+  data.frame(
+    Model = model_name,
+    Accuracy = round(cm$overall["Accuracy"], 4),
+    Precision = round(cm$byClass["Precision"], 4),
+    Recall = round(cm$byClass["Recall"], 4),
+    F1_Score = round(cm$byClass["F1"], 4)
+  )
+}
+```
+
+
+```{r}
+# Ensure alignment
+min_len <- min(length(rf_preds), length(xgb_preds), length(true_labels))
+rf_preds_trimmed <- rf_preds[1:min_len]
+xgb_preds_trimmed <- xgb_preds[1:min_len]
+true_labels_trimmed <- true_labels[1:min_len]
+
+# Evaluation function (define above this chunk)
+evaluate_model <- function(preds, true_labels, model_name) {
+  preds <- factor(preds, levels = c(0, 1))
+  true_labels <- factor(true_labels, levels = c(0, 1))
+  
+  cm <- confusionMatrix(preds, true_labels, positive = "1")
+  
+  data.frame(
+    Model = model_name,
+    Accuracy = round(cm$overall["Accuracy"], 4),
+    Precision = round(cm$byClass["Precision"], 4),
+    Recall = round(cm$byClass["Recall"], 4),
+    F1_Score = round(cm$byClass["F1"], 4)
+  )
+}
+
+# Evaluate all models using trimmed inputs
+results <- bind_rows(
+  evaluate_model(rf_preds_trimmed, true_labels_trimmed, "Random Forest"),
+  evaluate_model(xgb_preds_trimmed, true_labels_trimmed, "XGBoost")
+)
+
+# Output
+print(results)
+
+```
+
+```{r}
+# Check class ratio
+
+sum(df$Returns == 1) / sum(df$Returns == 0)
+```
+
+The class ratio is 0.683. It means that for every 1 negative (non-return), there are approximately 0.68 positive cases (returns).
+
+Returns (1) ≈ 40.6%
+
+No Returns (0) ≈ 59.4%
+
+
+##### Class weight
+
+Class weights are used to assign different importance (penalty) to each class when training a model. This helps the model pay more attention to the minority class during training.
+
+In randomForest(), classwt = c("0" = 1, "1" = 1.5) means the model will penalize misclassifying a return (1) more than misclassifying a non-return (0).
+
+In xgboost, we use weight = ifelse(Returns == 1, 1.5, 1) to give higher weight to return instances.
+
+```{r}
+# Load required libraries (using calss weight to improve the performance)
+library(caret)
+library(dplyr)
+library(xgboost)
+library(randomForest)
+library(lubridate)
+
+
+
+# Load your dataset
+df <- read.csv("ecommerce_customer_data_large.csv")
+
+# Replace dots in column names
+colnames(df) <- gsub("\\.", "_", colnames(df))
+
+# Fill missing Returns with 0 and convert to integer
+df$Returns[is.na(df$Returns)] <- 0
+df$Returns <- as.integer(df$Returns)
+
+# Convert Purchase_Date and engineer features
+df$Purchase_Date <- as.Date(df$Purchase_Date, format = "%Y-%m-%d")
+df$Purchase_Month <- month(df$Purchase_Date)
+df$Purchase_Year <- format(df$Purchase_Date, "%Y")
+
+# Drop Customer_Age
+df <- df %>% dplyr::select(-Customer_Age)
+
+# Select only required features
+df_model <- df %>%
+  dplyr::select(Returns, Total_Purchase_Amount, Product_Price, Age, Purchase_Month)
+
+# Train-test split
+set.seed(123)
+train_index <- createDataPartition(df_model$Returns, p = 0.8, list = FALSE)
+train_data <- df_model[train_index, ]
+test_data  <- df_model[-train_index, ]
+
+# True labels for evaluation
+true_labels <- factor(test_data$Returns, levels = c(0, 1))
+
+# Random Forest
+set.seed(123)
+rf_model <- randomForest(
+  as.factor(Returns) ~ .,
+  data = train_data,
+  classwt = c("0" = 1, "1" = 1.5),  # class weight to penalize minority class
+  ntree = 100
+)
+rf_preds <- predict(rf_model, test_data[, -1])
+
+# XGBoost with class weights
+train_matrix <- xgb.DMatrix(
+  data = as.matrix(train_data[, -1]),
+  label = train_data$Returns,
+  weight = ifelse(train_data$Returns == 1, 1.5, 1)
+)
+test_matrix <- xgb.DMatrix(data = as.matrix(test_data[, -1]), label = test_data$Returns)
+
+xgb_model <- xgboost(
+  data = train_matrix,
+  objective = "binary:logistic",
+  nrounds = 100,
+  max_depth = 6,
+  eta = 0.1,
+  verbose = 0
+)
+xgb_probs <- predict(xgb_model, test_matrix)
+xgb_preds <- ifelse(xgb_probs > 0.5, 1, 0)
+
+# Evaluation Function
+evaluate_model <- function(preds, true_labels, model_name) {
+  preds <- factor(preds, levels = c(0, 1))
+  cm <- confusionMatrix(preds, true_labels, positive = "1")
+  data.frame(
+    Model = model_name,
+    Accuracy = round(cm$overall["Accuracy"], 4),
+    Precision = round(cm$byClass["Precision"], 4),
+    Recall = round(cm$byClass["Recall"], 4),
+    F1_Score = round(cm$byClass["F1"], 4)
+  )
+}
+
+# Evaluate all models
+results <- bind_rows(
+  evaluate_model(rf_preds, true_labels, "Random Forest"),
+  evaluate_model(xgb_preds, true_labels, "XGBoost")
+)
+
+# Print results
+print(results)
+```
+
+### Conclusion
+
+This analysis applied classification, regression, and predictive techniques to understand customer behavior in three key areas: churn, returns, and spending.
+
+Churn Prediction: XGBoost combined with SMOTE achieved the best results, with exceptionally high precision and improved recall. This model enables businesses to proactively identify customers at risk of leaving and take targeted retention actions.
+
+Return Prediction: Although return rates were consistent (~40%) across product categories, category alone was not a strong predictor. The most effective models used top features beyond category, offering deeper insights into return behavior and guiding inventory and policy decisions.
+
+Spending Prediction: Regression models struggled to accurately predict customer spend, showing very low R² values. The random residuals suggest predictions were unbiased but lacked strong explanatory variables.
+
+Overall, while classification tasks like churn detection performed well, regression and category-based predictions highlight the need for richer behavioral and product-level features. Future improvements should focus on advanced feature engineering to enhance model accuracy and business value.
